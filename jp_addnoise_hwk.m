@@ -1,4 +1,4 @@
-function outputfiles = jp_addnoise_hwk(soundfiles, cfg)
+function [inputfiles,outputfiles] = jp_addnoise_hwk(soundfiles, cfg)
 %JP_ADDNOISE Adds noise to some soundfiles at specific SNRs.
 %
 % JP_ADDNOISE(SOUNDFILES, CFG) loops through .wav files in a cell array and
@@ -26,7 +26,8 @@ function outputfiles = jp_addnoise_hwk(soundfiles, cfg)
 % 09/16/19 -- the code has been modified to be used within the experimental
 %     code. noise sound to be added is randomly selected from the whole
 %     range of noise wav file -- HWK
-% 01/14/20 -- Now 
+% 01/29/20 -- 'inputfiles' output has been added. This variable includes
+%     input sound files, the rms of which is matched
 
 
 if ~isfield(cfg, 'prestim') || isempty(cfg.prestim)
@@ -84,6 +85,7 @@ end
 [yNoise, fsNoise] = audioread(cfg.noisefile);
 
 ynew_rms = nan(length(soundfiles),length(cfg.snrs));
+inputfiles = cell(length(soundfiles),1);
 outputfiles = cell(length(soundfiles),length(cfg.snrs));
 
 % Loop through soundfiles and add noise
@@ -137,12 +139,27 @@ for i = 1:length(soundfiles)
         y2 = outputfiles{i,j}*g;
         % Scale if over 1 or under -1
         if max(y2) > 1 || min(y2) < -1
-            fprintf('File %d: MIN = %.3f, MAX = %.3f, scaling so as not to clip.\n', i, min(y2), max(y2));
+            fprintf('Noise File %d: MIN = %.3f, MAX = %.3f, scaling so as not to clip.\n', i, min(y2), max(y2));
             biggest = max([abs(min(y2)) max(y2)]);
             y2 = (y2/biggest) * .99;
         end
-        outputfiles{i,j} = y2*g;
+        outputfiles{i,j} = y2;
     end
+end
+
+% rematch the rms of input soundfiles
+for i = 1:length(soundfiles)
+    y = cfg.adjamp*soundfiles{i};
+    rmsSignal = jp_rms(y);
+    g = mean_rms/rmsSignal;
+    y2 = y*g;
+    % Scale if over 1 or under -1
+    if max(y2) > 1 || min(y2) < -1
+        fprintf('Clear File %d: MIN = %.3f, MAX = %.3f, scaling so as not to clip.\n', i, min(y2), max(y2));
+        biggest = max([abs(min(y2)) max(y2)]);
+        y2 = (y2/biggest) * .99;
+    end
+    inputfiles{i} = y2;
 end
 
 end % main function
