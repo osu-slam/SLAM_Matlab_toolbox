@@ -30,7 +30,7 @@ function jp_addnoise_hwk_savefiles(soundfiles, cfg)
 % 01/29/20 -- 'inputfiles' output has been added. This variable includes
 %     input sound files, the rms of which is matched
 % 01/30/20 -- Forked into new version, this one saves outputfiles as a .wav
-%     file. MJH
+%     file. Output files are RMS normalized and guaranteed not to clip. MJH
 
 
 if ~isfield(cfg, 'prestim') || isempty(cfg.prestim)
@@ -71,8 +71,15 @@ if ischar(soundfiles) && exist(soundfiles, 'file')
    soundDir = soundfiles;
    D = dir(fullfile(soundfiles, '*.wav'));
    soundfiles = {D.name};
+   
+   newnames = cell(length(soundfiles), length(cfg.snrs)); 
 
    for i=1:length(soundfiles)
+       for j = 1:length(cfg.snrs)
+           newnames{i,j} = soundfiles{i}(1:end-4);
+           tag = ['_SNR' num2str(cfg.snrs(j))]; 
+           newnames{i,j} = [newnames{i,j} tag '.wav']; 
+       end
        soundfiles{i} = fullfile(soundDir, soundfiles{i});
    end
 else
@@ -205,5 +212,12 @@ for i = 1:nsignals
 end
 
 % Save files as .wav
-tic
+for i = 1:nsignals
+    filename = soundfiles{i}; 
+    audiowrite(filename, inputfiles{i}, fs); 
+    for j = 1:length(cfg.snrs)
+        filename = fullfile(cfg.outdir, newnames{i,j});
+        audiowrite(filename, outputfiles{i,j}, fs); 
+    end
+end
 
