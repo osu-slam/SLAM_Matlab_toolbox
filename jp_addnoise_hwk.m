@@ -38,9 +38,9 @@ if ~isfield(cfg, 'poststim') || isempty(cfg.poststim)
     cfg.poststim = 0.5;
 end
 
-if ~isfield(cfg, 'adjamp') || isempty(cfg.adjamp)
-    cfg.adjamp = 1;
-end
+% if ~isfield(cfg, 'adjamp') || isempty(cfg.adjamp)
+%     cfg.adjamp = 1;
+% end
 
 if ~isfield(cfg, 'fs') || isempty(cfg.fs)
     error('Must specify CFG.fs');
@@ -85,16 +85,18 @@ end
 [yNoise, fsNoise] = audioread(cfg.noisefile);
 
 ynew_rms = nan(length(soundfiles),length(cfg.snrs));
-inputfiles = cell(length(soundfiles),1);
+inputfiles = cell(length(soundfiles),1);  nsignals = length(inputfiles);
 outputfiles = cell(length(soundfiles),length(cfg.snrs));
 
 % Loop through soundfiles and add noise
-for i = 1:length(soundfiles)
+for i = 1:nsignals
     
 %     thisSound = soundfiles{i};
 %     [y, fs] = audioread(thisSound);
-    y = cfg.adjamp*soundfiles{i};  fs=cfg.fs;
-    assert(fs==fsNoise, 'Sampling rate of sentence %d (%i) does not match that of noise (%i).', i, fs, fsNoise);
+%     y = cfg.adjamp*soundfiles{i};  
+    y = soundfiles{i};  
+    fs=cfg.fs;
+%     assert(fs==fsNoise, 'Sampling rate of sentence %d (%i) does not match that of noise (%i).', i, fs, fsNoise);
 
     rmsSignal = jp_rms(y);
     dbSignal = jp_mag2db(rmsSignal);
@@ -122,9 +124,9 @@ for i = 1:length(soundfiles)
 %         fprintf('SNR %g:\tsignal = %.1f, noise = %.1f dB\n', thisSNR, dbSignal, dbScaledNoise);
 
         yNew = [zeros(cfg.prestim*fs,1); y; zeros(cfg.poststim*fs,1)] + scaledNoise;
-        if max(yNew) > 1
-            warning('Signal number %d clipping at %g.', i, max(yNew));
-        end
+%         if max(yNew) > 1
+%             warning('Signal number %d clipping at %g.', i, max(yNew));
+%         end
         
         outputfiles{i,j} = yNew;
         ynew_rms(i,j) = jp_rms(yNew);
@@ -133,33 +135,61 @@ end % looping through soundfiles
 
 % rematch the rms
 mean_rms = mean(ynew_rms(:));
-for i = 1:length(soundfiles)
+for i = 1:nsignals
     for j = 1:length(cfg.snrs)
         g = mean_rms/ynew_rms(i,j);
         y2 = outputfiles{i,j}*g;
-        % Scale if over 1 or under -1
-        if max(y2) > 1 || min(y2) < -1
-            fprintf('Noise File %d: MIN = %.3f, MAX = %.3f, scaling so as not to clip.\n', i, min(y2), max(y2));
-            biggest = max([abs(min(y2)) max(y2)]);
-            y2 = (y2/biggest) * .99;
-        end
+%         % Scale if over 1 or under -1
+%         if max(y2) > 1 || min(y2) < -1
+%             fprintf('Noise File %d: MIN = %.3f, MAX = %.3f, scaling so as not to clip.\n', i, min(y2), max(y2));
+%             biggest = max([abs(min(y2)) max(y2)]);
+%             y2 = (y2/biggest) * .99;
+%         end
         outputfiles{i,j} = y2;
     end
 end
 
 % rematch the rms of input soundfiles
-for i = 1:length(soundfiles)
-    y = cfg.adjamp*soundfiles{i};
+for i = 1:nsignals
+%     y = cfg.adjamp*soundfiles{i};
+    y = soundfiles{i};
     rmsSignal = jp_rms(y);
     g = mean_rms/rmsSignal;
     y2 = y*g;
-    % Scale if over 1 or under -1
-    if max(y2) > 1 || min(y2) < -1
-        fprintf('Clear File %d: MIN = %.3f, MAX = %.3f, scaling so as not to clip.\n', i, min(y2), max(y2));
-        biggest = max([abs(min(y2)) max(y2)]);
-        y2 = (y2/biggest) * .99;
-    end
+%     % Scale if over 1 or under -1
+%     if max(y2) > 1 || min(y2) < -1
+%         fprintf('Clear File %d: MIN = %.3f, MAX = %.3f, scaling so as not to clip.\n', i, min(y2), max(y2));
+%         biggest = max([abs(min(y2)) max(y2)]);
+%         y2 = (y2/biggest) * .99;
+%     end
     inputfiles{i} = y2;
 end
 
-end % main function
+% find a maximum absolute value across signals
+maxY = 0;
+for i = 1:nsignals
+    maxY = max( maxY, max(abs(inputfiles{i})) );
+    for j = 1:length(cfg.snrs)
+        maxY = max( maxY, max(abs(outputfiles{i,j})) );
+    end
+end
+
+% finally, normalize all the signals by the maximum value
+for i = 1:nsignals
+    inputfiles{i} = inputfiles{i}/maxY;
+    for j = 1:length(cfg.snrs)
+        outputfiles{i} = outputfiles{i}/maxY;
+    end
+end
+
+% double-check the clipping issue
+for i = 1:nsignals
+    if max(inputfiles{i}) > 1 || min(inputfiles{i}) < -1
+        fprintf('Clear File %d: MIN = %.3f, MAX = %.3f\n', i, min(inputfiles{i}), max(inputfiles{i}));
+    end
+    for j = 1:length(cfg.snrs)
+        if max(outputfiles{i,j}) > 1 || min(outputfiles{i,j}) < -1
+            fprintf('Noise File %d: MIN = %.3f, MAX = %.3f\n', i, min(outputfiles{i,j}), max(outputfiles{i,j}));
+        end
+    end
+end
