@@ -1,4 +1,4 @@
-function [inputfiles,outputfiles] = jp_addnoise_hwk(soundfiles, cfg)
+function jp_addnoise_hwk_savefiles(soundfiles, cfg)
 %JP_ADDNOISE Adds noise to some soundfiles at specific SNRs.
 %
 % JP_ADDNOISE(SOUNDFILES, CFG) loops through .wav files in a cell array and
@@ -10,6 +10,7 @@ function [inputfiles,outputfiles] = jp_addnoise_hwk(soundfiles, cfg)
 %   CFG.snrs       SNRs used to add signal and noise (dB)
 %   CFG.fs         sampling frequency
 %   CFG.adjamp     adjust the amplitude of signal [0~1, default 1]   
+%   CFG.outdir     output directory for finished stimuli
 %
 % If SOUNDFILES is a directory, all of the .wav files in that directory are
 % treated as the input files.
@@ -28,7 +29,8 @@ function [inputfiles,outputfiles] = jp_addnoise_hwk(soundfiles, cfg)
 %     range of noise wav file -- HWK
 % 01/29/20 -- 'inputfiles' output has been added. This variable includes
 %     input sound files, the rms of which is matched
-% 01/30/20 -- missing index for output files. MJH
+% 01/30/20 -- Forked into new version, this one saves outputfiles as a .wav
+%     file. MJH
 
 
 if ~isfield(cfg, 'prestim') || isempty(cfg.prestim)
@@ -55,13 +57,17 @@ if ~isfield(cfg, 'noisefile')
     error('Must specify path to noise file in CFG.noisefile');
 end
 
+if ~isfield(cfg, 'outdir')
+    error('Please specify outdir as field of cfg structure!')
+end
+
 % error checking
 if ~exist(cfg.noisefile, 'file')
     error('Noise file %s not found.', cfg.noisefile);
 end
 
 % if soundfiles is a directory, get .wav files
-if ischar(soundfiles) && isfolder(soundfiles)
+if ischar(soundfiles) && exist(soundfiles, 'file')
    soundDir = soundfiles;
    D = dir(fullfile(soundfiles, '*.wav'));
    soundfiles = {D.name};
@@ -92,11 +98,12 @@ outputfiles = cell(length(soundfiles),length(cfg.snrs));
 % Loop through soundfiles and add noise
 for i = 1:nsignals
     
-%     thisSound = soundfiles{i};
-%     [y, fs] = audioread(thisSound);
+    thisSound = soundfiles{i};
+    [y, fs] = audioread(thisSound);
+    inputfiles{i} = y; 
 %     y = cfg.adjamp*soundfiles{i};  
-    y = soundfiles{i};  
-    fs=cfg.fs;
+%     y = soundfiles{i};  
+%     fs=cfg.fs;
 %     assert(fs==fsNoise, 'Sampling rate of sentence %d (%i) does not match that of noise (%i).', i, fs, fsNoise);
 
     rmsSignal = jp_rms(y);
@@ -153,7 +160,7 @@ end
 % rematch the rms of input soundfiles
 for i = 1:nsignals
 %     y = cfg.adjamp*soundfiles{i};
-    y = soundfiles{i};
+    y = inputfiles{i};
     rmsSignal = jp_rms(y);
     g = mean_rms/rmsSignal;
     y2 = y*g;
@@ -166,10 +173,12 @@ for i = 1:nsignals
     inputfiles{i} = y2;
 end
 
+% intensity = cellfun(@abs, inputfiles, 'UniformOutput', 0)
+
 % find a maximum absolute value across signals
 maxY = 0;
 for i = 1:nsignals
-    maxY = max( maxY, max(abs(inputfiles{i})) );
+    maxY = max(maxY, max(abs(inputfiles{i})));
     for j = 1:length(cfg.snrs)
         maxY = max( maxY, max(abs(outputfiles{i,j})) );
     end
@@ -194,3 +203,7 @@ for i = 1:nsignals
         end
     end
 end
+
+% Save files as .wav
+tic
+
