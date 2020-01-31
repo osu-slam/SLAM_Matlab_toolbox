@@ -181,3 +181,9 @@ for i = 1:nsignals
         end
     end
 end
+
+% add silent duration prior and post to input audio files to make durations
+% of clear and noisy signals equal
+for i = 1:nsignals
+    inputfiles{i} = [zeros(cfg.prestim*fs,1); inputfiles{i}; zeros(cfg.poststim*fs,1)]; 
+end
