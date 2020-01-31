@@ -9,7 +9,7 @@ function [inputfiles,outputfiles] = jp_addnoise_hwk(soundfiles, cfg)
 %   CFG.poststim   how much noise after stimulus (seconds) [default .5]
 %   CFG.snrs       SNRs used to add signal and noise (dB)
 %   CFG.fs         sampling frequency
-%   CFG.adjamp     adjust the amplitude of signal [0~1, default 1]   
+%   CFG.noisedur   noise_only duration when a file is empty [default .5]
 %
 % If SOUNDFILES is a directory, all of the .wav files in that directory are
 % treated as the input files.
@@ -28,7 +28,6 @@ function [inputfiles,outputfiles] = jp_addnoise_hwk(soundfiles, cfg)
 %     range of noise wav file -- HWK
 % 01/29/20 -- 'inputfiles' output has been added. This variable includes
 %     input sound files, the rms of which is matched
-% 01/30/20 -- missing index for output files. MJH
 
 
 if ~isfield(cfg, 'prestim') || isempty(cfg.prestim)
@@ -39,9 +38,9 @@ if ~isfield(cfg, 'poststim') || isempty(cfg.poststim)
     cfg.poststim = 0.5;
 end
 
-% if ~isfield(cfg, 'adjamp') || isempty(cfg.adjamp)
-%     cfg.adjamp = 1;
-% end
+if ~isfield(cfg, 'noisedur') || isempty(cfg.noisedur)
+    cfg.noisedur = 2.56;
+end
 
 if ~isfield(cfg, 'fs') || isempty(cfg.fs)
     error('Must specify CFG.fs');
@@ -91,79 +90,67 @@ outputfiles = cell(length(soundfiles),length(cfg.snrs));
 
 % Loop through soundfiles and add noise
 for i = 1:nsignals
-    
-%     thisSound = soundfiles{i};
-%     [y, fs] = audioread(thisSound);
-%     y = cfg.adjamp*soundfiles{i};  
-    y = soundfiles{i};  
+    % add noise if there exists an audio file
     fs=cfg.fs;
-%     assert(fs==fsNoise, 'Sampling rate of sentence %d (%i) does not match that of noise (%i).', i, fs, fsNoise);
+    if ~isempty(soundfiles{i})
+        y = soundfiles{i};  
+        inputfiles{i} = y;
 
-    rmsSignal = jp_rms(y);
-    dbSignal = jp_mag2db(rmsSignal);
+        rmsSignal = jp_rms(y);
+        dbSignal = jp_mag2db(rmsSignal);
 
-    % get the part of noise we need, and it's RMS and dB
-    numSampleNoise = length(y) + cfg.prestim*fs + cfg.poststim*fs;
-    spNoise = floor( rand*(length(yNoise)-numSampleNoise) );
-    
-    tmpNoise = yNoise(spNoise:spNoise+numSampleNoise-1);
-    tmpNoise = makeFadeInOut(fsNoise, tmpNoise, 1, .05);
-    rmsNoise = jp_rms(tmpNoise);
-    
-    j=0;
-    for thisSNR = cfg.snrs
-        j=j+1;
+        % get the part of noise we need, and it's RMS and dB
+        numSampleNoise = length(y) + cfg.prestim*fs + cfg.poststim*fs;
+        spNoise = ceil( rand*(length(yNoise)-numSampleNoise) );
+
+        tmpNoise = yNoise(spNoise:spNoise+numSampleNoise-1);
+        tmpNoise = makeFadeInOut(fsNoise, tmpNoise, 1, .05);
+        rmsNoise = jp_rms(tmpNoise);
+
+        j=0;
+        for thisSNR = cfg.snrs  % going through SNRs
+            j=j+1;
+
+            targetDb = dbSignal - thisSNR; % target for noise dB
+            targetRMS = 10^(targetDb/20);
+            scaleFactor = targetRMS/rmsNoise;
+
+            scaledNoise = tmpNoise * scaleFactor;
+            yNew = [zeros(cfg.prestim*fs,1); y; zeros(cfg.poststim*fs,1)] + scaledNoise;
+
+            outputfiles{i,j} = yNew;
+            ynew_rms(i,j) = jp_rms(yNew);
+        end
+    else  % add babble track only
+        % get the part of noise we need
+        numSampleNoise = (cfg.noisedur + cfg.prestim + cfg.poststim) * fs;
+        spNoise = ceil( rand*(length(yNoise)-numSampleNoise) );
+
+        tmpNoise = yNoise(spNoise:spNoise+numSampleNoise-1);
+        yNew = makeFadeInOut(fsNoise, tmpNoise, 1, .05);
         
-        targetDb = dbSignal - thisSNR; % target for noise dB
-        targetRMS = 10^(targetDb/20);
-        scaleFactor = targetRMS/rmsNoise;
-
-        scaledNoise = tmpNoise * scaleFactor;
-
-%         rmsScaledNoise = jp_rms(scaledNoise);
-%         dbScaledNoise = jp_mag2db(rmsScaledNoise);
-%         fprintf('SNR %g:\tsignal = %.1f, noise = %.1f dB\n', thisSNR, dbSignal, dbScaledNoise);
-
-        yNew = [zeros(cfg.prestim*fs,1); y; zeros(cfg.poststim*fs,1)] + scaledNoise;
-%         if max(yNew) > 1
-%             warning('Signal number %d clipping at %g.', i, max(yNew));
-%         end
-        
-        outputfiles{i,j} = yNew;
-        ynew_rms(i,j) = jp_rms(yNew);
-    end % going through SNRs
-end % looping through soundfiles
-
-% rematch the rms
-mean_rms = mean(ynew_rms(:));
-for i = 1:nsignals
-    for j = 1:length(cfg.snrs)
-        g = mean_rms/ynew_rms(i,j);
-        y2 = outputfiles{i,j}*g;
-%         % Scale if over 1 or under -1
-%         if max(y2) > 1 || min(y2) < -1
-%             fprintf('Noise File %d: MIN = %.3f, MAX = %.3f, scaling so as not to clip.\n', i, min(y2), max(y2));
-%             biggest = max([abs(min(y2)) max(y2)]);
-%             y2 = (y2/biggest) * .99;
-%         end
-        outputfiles{i,j} = y2;
+        inputfiles{i} = yNew;
+        for thisSNR = cfg.snrs
+            outputfiles{i,j} = yNew;
+            ynew_rms(i,j) = jp_rms(yNew);
+        end
     end
 end
 
-% rematch the rms of input soundfiles
+% rematch the rms of input and output soundfiles
+mean_rms = mean(ynew_rms(:));
 for i = 1:nsignals
-%     y = cfg.adjamp*soundfiles{i};
-    y = soundfiles{i};
+    y = inputfiles{i};
     rmsSignal = jp_rms(y);
     g = mean_rms/rmsSignal;
     y2 = y*g;
-%     % Scale if over 1 or under -1
-%     if max(y2) > 1 || min(y2) < -1
-%         fprintf('Clear File %d: MIN = %.3f, MAX = %.3f, scaling so as not to clip.\n', i, min(y2), max(y2));
-%         biggest = max([abs(min(y2)) max(y2)]);
-%         y2 = (y2/biggest) * .99;
-%     end
     inputfiles{i} = y2;
+    for j = 1:length(cfg.snrs)
+        y = outputfiles{i,j};
+        g = mean_rms/ynew_rms(i,j);
+        y2 = y*g;
+        outputfiles{i,j} = y2;
+    end
 end
 
 % find a maximum absolute value across signals
