@@ -130,7 +130,7 @@ for i = 1:nsignals
         yNew = makeFadeInOut(fsNoise, tmpNoise, 1, .05);
         
         inputfiles{i} = yNew;
-        for thisSNR = cfg.snrs
+        for j = 1:length(cfg.snrs)
             outputfiles{i,j} = yNew;
             ynew_rms(i,j) = jp_rms(yNew);
         end
