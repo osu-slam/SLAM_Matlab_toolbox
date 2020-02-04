@@ -123,7 +123,7 @@ for i = 1:nsignals
         end
     else  % add babble track only
         % get the part of noise we need
-        numSampleNoise = (cfg.noisedur + cfg.prestim + cfg.poststim) * fs;
+        numSampleNoise = round((cfg.noisedur + cfg.prestim + cfg.poststim) * fs);
         spNoise = ceil( rand*(length(yNoise)-numSampleNoise) );
 
         tmpNoise = yNoise(spNoise:spNoise+numSampleNoise-1);
