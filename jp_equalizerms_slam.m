@@ -92,18 +92,24 @@ end
 % find a maximum absolute value across signals
 maxY = 0;
 for i = 1:length(D)
-    maxY = max( maxY, max(abs(inputfiles{i})) );
+    if ~isempty(inputfiles{i})
+        maxY = max( maxY, max(abs(inputfiles{i})) );
+    end
 end
 
 % finally, normalize all the signals by the maximum value
-for i = 1:nsignals
-    inputfiles{i} = inputfiles{i}/maxY;
+for i = 1:length(D)
+    if ~isempty(inputfiles{i})
+        inputfiles{i} = inputfiles{i}/maxY;
+    end
 end
 
 % double-check the clipping issue
-for i = 1:nsignals
-    if max(inputfiles{i}) > 1 || min(inputfiles{i}) < -1
-        fprintf('File %d: MIN = %.3f, MAX = %.3f\n', i, min(inputfiles{i}), max(inputfiles{i}));
+for i = 1:length(D)
+    if ~isempty(inputfiles{i})
+        if max(inputfiles{i}) > 1 || min(inputfiles{i}) < -1
+            fprintf('File %d: MIN = %.3f, MAX = %.3f\n', i, min(inputfiles{i}), max(inputfiles{i}));
+        end
     end
 end
 
@@ -117,7 +123,7 @@ for i=1:length(D)
         fileNumber = fileNumber + 1;
 
         % Write the new .wav file
-        audiowrite(fullfile(outputDir,fileName),inputfiles{i},fs);
+        audiowrite(fullfile(outputDir,fileName),inputfiles{i},fs(i));
 
         % Note how far along we are
         if verbose && rmsCount>20 && mod(fileNumber,round(rmsCount/10))==0
