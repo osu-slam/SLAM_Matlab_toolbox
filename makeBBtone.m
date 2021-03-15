@@ -1,4 +1,4 @@
-function [t, tone] = makeBBtone(srate, carrier_freq, diff_freq, dur)
+function [t, tone] = makeBBtone(srate, carrier_freq, diff_freq, dur, fdur)
 %
 % create tone of specified frequency, sampling rate, and duration
 % play and plot
@@ -13,6 +13,9 @@ function [t, tone] = makeBBtone(srate, carrier_freq, diff_freq, dur)
 % t -- vector of sample times in secs
 % tone -- two vectors of sample values a.u.
 
+if nargin<5
+    fdur = 0.05;
+end
 
 t = 0:1/srate:dur;
 w = 2*pi*[carrier_freq carrier_freq+diff_freq];
@@ -22,7 +25,6 @@ for i=1:2
     tone(:,i) = cos(w(i)*t);
 end
 
-fdur = 0.05;
 tone = makeFadeInOut(srate, tone, 2, fdur);
 
 % soundsc(tone, srate);
